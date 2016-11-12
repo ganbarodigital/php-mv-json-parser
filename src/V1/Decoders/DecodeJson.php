@@ -45,8 +45,9 @@ namespace GanbaroDigital\JsonParser\V1\Decoders;
 
 use InvalidArgumentException;
 use GanbaroDigital\JsonParser\V1\Exceptions\CannotDecodeJson;
-use Seld\JsonLint\JsonParser as JsonLintParser;
-use Seld\JsonLint\ParsingException;
+use GanbaroDigital\JsonParser\V1\Internal\JsonGrammar;
+use GanbaroDigital\TextParser\V1\Lexer\ApplyGrammar;
+use GanbaroDigital\TextParser\V1\Lexer\WhitespaceAdjuster;
 
 /**
  * decode a JSON-encoded string
@@ -72,20 +73,24 @@ class DecodeJson
             throw new InvalidArgumentException('$rawJson is not a string');
         }
 
+        // get the grammar for JSON
+        $language = JsonGrammar::getLanguage();
+
         // is the string valid JSON?
-        //
-        // we'll replace this with our own parser soon!
-        $linter = new JsonLintParser;
-        $errors = $linter->lint($rawJson);
-        if ($errors) {
+        $matches = ApplyGrammar::to($language, 'value', $rawJson, 'json', new WhitespaceAdjuster);
+        if (!$matches['matched']) {
             // apparently not :(
             throw CannotDecodeJson::newFromInputParameter(
                 $rawJson, '$rawJson', [
-                    'linterError' => $errors->getMessage(),
-                    'linterDetails' => $errors->getDetails()
+                    'parser_error' => "Expected " . $matches['expected']->getPseudoBNF() . " at line "
+                         . $matches['position']->getLineNumber() . ', column '
+                         . $matches['position']->getLineOffset()
                 ]
             );
         }
+
+        // convert the parsed tokens into a value
+        return $matches['value']->evaluate();
 
         // at this point, the JSON _should_ decode successfully
         //
